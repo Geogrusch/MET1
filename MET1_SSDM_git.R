@@ -49,7 +49,7 @@ directory <- "your_directory"
 setwd(directory)
 #--------------------------------------------------------------------------------:)
 ### load data of script 1 #######################################################
-covariates <- rast("./covariates/covariates_new.grd")
+covariates <- rast("./covariates/predictors.grd")
 
 plot(covariates)
 names(covariates)

@@ -61,7 +61,7 @@ level <- 0                   # if entire country is wished set level to 0, for s
 #----------------------------------------------------------------------------------:)
 
   
-rp <- c("caret", "corrplot", "devtools", "dplyr", "fuzzySim","geodata", "getPass",   
+reqp <- c("caret", "corrplot", "devtools", "dplyr", "fuzzySim","geodata", "getPass",   
         "MODIStsp", "raster", "reticulate", 
         "rfUtilities","rgdal", "Rsagacmd", "RStoolbox", "sf",  
         "stringr", 'terra', "tidyverse") # required packages
@@ -77,8 +77,8 @@ rp <- c("caret", "corrplot", "devtools", "dplyr", "fuzzySim","geodata", "getPass
   rm(reqp, ip) # remove vector
   
   
-  reqp <- c("scrubr", "flexsdm" )
-  reqp2 <- c("ropensci/scrubr", "sjevelazco/flexsdm")
+  reqp <- c("gdalUtils",  "rgee", "flexsdm" )
+  reqp2 <- c("gearslaboratory/gdalUtils", "r-spatial/rgee", "sjevelazco/flexsdm")
   ip <- reqp[!(reqp %in% installed.packages()[, "Package"])] # subset packages
   
   
@@ -207,7 +207,7 @@ dir.create("soildata")
 
 ### bounding box in interrupted Goode homolosine projection, it is better handled by the webservice
 
-bb=c(round(as.numeric(extent_AOI_igh@xmin), 0), round(as.numeric(extent_AOI_igh@ymax), 0),round(as.numeric(extent_AOI_igh@xmax), 0),round(as.numeric(extent_AOI_igh@ymin), 0)) 
+bb=c(round(as.numeric(extent_AOI_igh[1]), 0), round(as.numeric(extent_AOI_igh[4]), 0),round(as.numeric(extent_AOI_igh[2]), 0),round(as.numeric(extent_AOI_igh[3]), 0)) 
 
 # define soil metrics
 soilgriddata <- c("bdod", "cec", "cfvo", "clay", "nitrogen", "phh2o", "sand", "silt", "soc", "ocd")
@@ -301,41 +301,41 @@ rm(soil_raster_tmp, soil_files, soilgriddata, soildepth)
 ### define download SRTM extent (might not work for large countries)
 ### trying to ensure that entire AOI is downloaded as SRTM tiles using the corner points and centroid
 ### alternatively adaption working with SRTM Tiles .shp feasible
-
 SRTM_Download_for_cornerpoints <- function (boundingbox, centroid_coords) {
-  SW <- st_point(c(boundingbox@xmin, boundingbox@ymin))
-  SE <- st_point(c(boundingbox@xmax, boundingbox@ymin))
-  NW <- st_point(c(boundingbox@xmin, boundingbox@ymax))
-  NE <- st_point(c(boundingbox@xmax, boundingbox@ymax))
+  SW <- st_point(c(boundingbox[1], boundingbox[3]))
+  SE <- st_point(c(boundingbox[2], boundingbox[3]))
+  NW <- st_point(c(boundingbox[1], boundingbox[4]))
+  NE <- st_point(c(boundingbox[2], boundingbox[4]))
   SRTM <- elevation_3s(lon = centroid_coords[1], lat = centroid_coords[2], path = getwd() )
   SRTM_extent <- as.polygons(ext(SRTM))
   # check if any corner points are not contained and if so download another tile  
   
   if (!st_contains(SW, st_as_sf(SRTM_extent)  , sparse = F)) { 
-    SRTM2 <- elevation_3s(lon = boundingbox@xmin, lat = boundingbox@ymin, path = getwd())
+    SRTM2 <- elevation_3s(lon = boundingbox[1], lat = boundingbox[3], path = getwd())
     SRTM <- mosaic(SRTM, SRTM2, fun="mean")
     SRTM_extent <- as.polygons(ext(SRTM))
     rm(SRTM2)
   }
   if (!st_contains(SE,st_as_sf(SRTM_extent), sparse = F)) { 
-    SRTM2 <- elevation_3s(lon = boundingbox@xmax, lat = boundingbox@ymin, path = getwd())
+    SRTM2 <- elevation_3s(lon = boundingbox[2], lat = boundingbox[3], path = getwd())
     SRTM <- mosaic(SRTM, SRTM2, fun="mean")
     SRTM_extent <- as.polygons(ext(SRTM))
     rm(SRTM2)
   } 
   if (!st_contains(NW, st_as_sf(SRTM_extent), sparse = F)) { 
-    SRTM2 <- elevation_3s(lon = boundingbox@xmin, lat = boundingbox@ymax, path = getwd())
+    SRTM2 <- elevation_3s(lon = boundingbox[1], lat = boundingbox[4], path = getwd())
     SRTM <- mosaic(SRTM, SRTM2, fun="mean")
     SRTM_extent <- as.polygons(ext(SRTM))
     rm(SRTM2)
   }
   if (!st_contains(NE, st_as_sf(SRTM_extent), sparse = F)) { 
-    SRTM2 <- elevation_3s(lon = boundingbox@xmax, lat = boundingbox@ymax, path = getwd())
+    SRTM2 <- elevation_3s(lon = boundingbox[2], lat = boundingbox[4], path = getwd())
     SRTM <- mosaic(SRTM, SRTM2, fun="mean")
     rm(SRTM2, SRTM_extent)
   }
   return(SRTM)
 }
+
 
 SRTM <- SRTM_Download_for_cornerpoints(boundingbox = extent_ll, centroid_coords = coords)
 
@@ -450,7 +450,7 @@ biomass_raw <- list.files("./Biomass", full.names = T,  pattern="*.tif$", recurs
 biomass_list <- lapply(1:length(biomass_raw), function(x) {rast(biomass_raw[x]) })
 
 # if required mosaic different tiles
-biomass_mosaic <- do.call(terra::mosaic,biomass_list) %>% 
+biomass_mosaic <- terra::mosaic(sprc(biomass_list)) %>% 
   terra::project(soil_raster, method = "bilinear")
 names(biomass_mosaic) <- "biomass"
 
@@ -562,8 +562,8 @@ plot(shapeAOI_UTM, add=T)
 # Download from NASA earthdata server (maintenance on wednesday)
 dir.create("MODIS_landcover")
 
-bb_utm=c(round(as.numeric(extent_AOI_UTM@xmin), 0), round(as.numeric(extent_AOI_UTM@ymin), 0), 
-     round(as.numeric(extent_AOI_UTM@xmax), 0), round(as.numeric(extent_AOI_UTM@ymax), 0)) 
+bb_utm=c(round(as.numeric(extent_AOI_UTM[1]), 0), round(as.numeric(extent_AOI_UTM[3]), 0), 
+     round(as.numeric(extent_AOI_UTM[2]), 0), round(as.numeric(extent_AOI_UTM[4]), 0)) 
 
 MODIStsp_get_prodnames()
 MODIStsp_get_prodlayers("LandCover_Type_Yearly_500m (MCD12Q1)")
@@ -584,7 +584,7 @@ MODIStsp(gui = FALSE,
 
 MODIS_LC <- rast("./MODIS_landcover/LandCover_Type_Yearly_500m_v6/LC1/MCD12Q1_LC1_2019_001.tif") %>% 
   terra::as.factor() %>% 
-  terra::project(covariates, method = "near" ) %>% 
+  terra::project(soil_raster, method = "near" ) %>% 
     setNames("LC_MODIS")
 plot(MODIS_LC)
 
@@ -715,13 +715,13 @@ for (i in 1:length(MODIS_NPP_files)) {
   if (i == 1){
     MODIS_raster <- rast(MODIS_NPP_files[i]) %>% 
       terra::classify(matrix(c(32700, Inf, NA), ncol = 3, byrow = T)) %>% 
-      terra::project(covariates2, method="bilinear") 
+      terra::project(soil_raster, method="bilinear") 
       
         }
   else {
     add(MODIS_raster) <- rast(MODIS_NPP_files[i]) %>% 
      terra::classify(matrix(c(32700, Inf, NA), ncol = 3, byrow = T)) %>% 
-     terra::project(covariates2, method="bilinear") 
+     terra::project(soil_raster, method="bilinear") 
       
   }
 }
@@ -732,7 +732,6 @@ NPP <- terra::app(MODIS_raster, fun= "mean", filename="NPP_MODIS.tif", overwrite
 
 plot(NPP)
 
-plot(MODIS_raster$MOD17A3HGF_Npp_2001_001)
 rm(MODIS_NPP_files, MODIS_raster)
 
 #################################################################################:)
@@ -754,12 +753,12 @@ cloudMaskL8 <- function(image){
 
 ## GEE Asset creation, only once needed
 
-# shape_GEE <- sf_as_ee(st_buffer(shapeAOI, 10000), 
-#                       via = "getInfo_to_asset",
-#                       assetId = sprintf("%s/%s", ee_get_assethome(), 'rgee_SDM_buffer'))
+ shape_GEE <- sf_as_ee(st_buffer(shapeAOI, 10000), 
+                       via = "getInfo_to_asset",
+                       assetId = sprintf("%s/%s", ee_get_assethome(), 'rgee_SDM_buffer', country))
 
 ## load Asset
-shape_GEE <- ee$FeatureCollection(sprintf("%s/%s", ee_get_assethome(), 'rgee_SDM_buffer')) 
+shape_GEE <- ee$FeatureCollection(sprintf("%s/%s", ee_get_assethome(), 'rgee_SDM_buffer', country)) 
 
 
 
@@ -826,8 +825,8 @@ rm(L8_NDVI_median_interpolated, L8_NDVI_stdv_interpolated, interpolation_gaps, a
    L8_NDVI_median, L8_NDVI_stdv, L8Image, cloudMaskL8, shape_GEE)
 
 # projection
-NDVI_median <- rast(NDVI_median) %>% terra::project(soil_raster, method="bilinear")
-NDVI_stdv <- rast(NDVI_stdv) %>% terra::project(soil_raster, method="bilinear")
+NDVI_median <- rast(NDVI_median) %>% terra::project(soil_raster, method="bilinear") %>% setNames("NDVI_median")
+NDVI_stdv <- rast(NDVI_stdv) %>% terra::project(soil_raster, method="bilinear") %>% setNames("NDVI_stdv")
 
 # manual data loading
 #NDVI_median <- rast("./VI/L8_median_NDVI_2022_09_27_11_26_05.tif") %>% terra::project(soil_raster, method="bilinear")
@@ -886,7 +885,7 @@ covariates <- terra::rast(list(covariates)) # necessary conversion
 
 ### crop and mask to a buffer mask
 buffer_shape <- st_buffer(shapeAOI_UTM, 10000)
-covariates <- terra::crop(covariates2, y=terra::ext(vect(buffer_shape)), snap='near', mask=T)
+covariates <- terra::crop(covariates, y=terra::ext(vect(buffer_shape)), snap='near', mask=T)
 covariates  <- terra::mask(covariates, mask=vect(buffer_shape))
 
 ### save covariates stack as .grd
